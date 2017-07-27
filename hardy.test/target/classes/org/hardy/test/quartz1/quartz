@@ -1,0 +1,27 @@
+<quartz>
+   <jobs>
+     <job id="name" group="group name" class="com.soong">
+     </job>
+   </jobs>
+   <triggers>
+	   <trigger id="t1">
+	   	<cron>0 0/4 * * * ?</cron>
+	   </trigger>
+	</triggers>
+	<schedulers>
+		<scheduler job_id="a" trigger_id="aa" timeout="600" concurrent="1" enabled="true">
+           <params>
+     		<entry>
+            	<key>A-1</key>
+            	<value>ffgghh</value>
+            </entry>
+            <entry>
+            	<key>B-2</key>
+            	<value>ddffvv</value>
+            </entry>
+     	</params>
+		</scheduler>
+	</schedulers>
+</quartz>
+
+	 

@@ -1,0 +1,139 @@
+说明:该项目主要用于根据Annotation的标签检测方法调用次数和成功率。
+
+需求 1-可对所有MVC层种方法监控。2-只记录标记方法,或记录全局方法。3-对方法每次调用时的输入参数和执行时间以及异常进行记录。不记录返回结果
+
+基本思路:1 程序读取要扫描的包获取全部的标注Annotation的方法或根据配置读取所有包下的方法。
+	  2 将方法类名注册到内存中。
+	  3 当调用该方法时通过aop获取类和方法并对应注册内存中的类与方法记录下所需参数，并统计。
+	  
+实例:
+//记录关系 方法和随机UUID
+public static final Map<Method,String> monitorMethodUUid = new HashMap<Method,String>();
+
+
+package org.bluesky_dao.interceptor;
+
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import javax.inject.Inject;
+
+import org.bluesky_common.Config;
+import org.bluesky_dao.mapper.CommonMapper;
+
+import www.song.monitor.system.ConfigMonitor;
+import www.song.monitor.system.MonitorInterceptor;
+import www.song.monitor.system.db.support.ClassMethod;
+import www.song.monitor.system.db.support.MonitorException;
+import www.song.monitor.system.db.support.MonitorStatistic;
+/**
+*这个类实现MonitorInterceptor接口
+*
+**/
+public class MethodBugInterceptor implements MonitorInterceptor{
+    @Inject
+    private CommonMapper mapper;
+	@Override
+	public void recoderExecuteResult(Class<?> clazz, Method method,String argsJson) {
+		   //保存ClassMethod
+		 if(Config.monitorMethodUUid.containsKey(method)){
+			 String uuid = Config.monitorMethodUUid.get(method);
+			  ClassMethod cm = new ClassMethod();
+			  cm.setClassName(clazz.getName());
+			  cm.setMethodName(method.getName());
+			  cm.setUuid(uuid);
+			  cm.setArgJson(argsJson);
+			  mapper.insertPersitence(cm);
+			  MonitorStatistic ms = new MonitorStatistic();
+			  ms.setUuid(uuid);
+			 List<Map<String, Object>>  list =  mapper.selectSame(ms);
+			 if(!list.isEmpty()){
+				  Map<String,Object> map = list.get(0);
+				  ms.setCallNum((int)map.get("callNum")+1);
+				  mapper.updatePersitence(ms);
+			 }
+			  
+		 }
+		 
+	}
+	
+	@Override
+	public void recoderException(Class<?> clazz, Method method,
+			String argsJson, Exception e) {
+		  //保存ClassMethod
+		 if(Config.monitorMethodUUid.containsKey(method)){
+			 String uuid = Config.monitorMethodUUid.get(method);
+			  ClassMethod cm = new ClassMethod();
+			  cm.setClassName(clazz.getName());
+			  cm.setMethodName(method.getName());
+			  cm.setUuid(uuid);
+			  cm.setArgJson(argsJson);
+			  mapper.insertPersitence(cm);
+			  MonitorException me = new MonitorException();
+			  me.setEid(cm.getEid());
+			  me.setExceptionCause(e.getCause().toString());
+			  if(e!=null){
+				  mapper.insertPersitence(me);
+				  MonitorStatistic ms = new MonitorStatistic();
+				  ms.setUuid(uuid);
+				 List<Map<String, Object>>  list =  mapper.selectSame(ms);
+				 if(!list.isEmpty()){
+					 Map<String,Object> map = list.get(0);
+					  ms.setCallNum((int)map.get("callNum")+1);
+					  ms.setExceptionNum((int)map.get("exceptionNum")+1);
+					  mapper.updatePersitence(ms);
+				 }
+				  
+			  }
+			  
+		 }
+		 
+		
+	}
+	
+	@Override
+	public void registerMonitorStatistic() {
+		  try {
+			 //此处读取扫描包，然后将所有泪方法注册到Config.monitor
+			ConfigMonitor.registerMethod("org.bluesky_dao.mapper");
+			List<Object[]>  result = ConfigMonitor.getAuthorDescrip();
+			for(Object[] ss:result){
+				String uuid = UUID.randomUUID().toString();
+//				Config.monitor.put(uuid, new String);
+				Config.monitorMethodUUid.put((Method) ss[1], uuid);
+				//向数据库保存一份
+				MonitorStatistic ms = new MonitorStatistic();
+				ms.setUuid(uuid);
+				ms.setClassName(((Class<?>)ss[0]).getName());
+				ms.setMethodName(((Method)ss[1]).getName());
+				ms.setAuthor(ss[2].toString());
+				ms.setCallNum(0);
+				ms.setExceptionNum(0);
+				mapper.insertPersitence(ms);
+			}
+		} catch (ClassNotFoundException | IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		 
+		
+	}
+
+	
+
+}
+
+配置
+<bean id="methodBugInterceptor" class="www.song.monitor.system.MethodBugInterceptor">
+	    <property name="monitor">
+	       <bean class="org.bluesky_dao.interceptor.MethodBugInterceptor" init-method="registerMonitorStatistic"/>
+	    </property>
+	</bean>
+	<aop:config>
+	   <aop:pointcut id="methodBugInterceptorPointcut" 
+	   		expression="execution(* org.bluesky_dao.mapper.*.*(..))" />
+	   <aop:advisor pointcut-ref="methodBugInterceptorPointcut" advice-ref="methodBugInterceptor" /> 
+	</aop:config>

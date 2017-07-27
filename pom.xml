@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>www.song</groupId>
+  <artifactId>hardy.parent</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>hardy.parent</name>
+  <url>http://maven.apache.org</url>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring.version>4.2.5.RELEASE</spring.version>
+  </properties>
+  <modules>
+  	<module>hardy.test</module>
+  	<module>hardy.securite</module>
+  	<module>hardy.jsonhelper</module>
+  	<module>hardy.timehelper</module>
+  	<module>hardy.static</module>
+  	<module>hardy.xmlhelper</module>
+  	<module>hardy.mybatishelper</module>
+    <module>hardy.servlet</module>
+    <module>hardy.sqlhelper</module>
+    <module>hardy.cachehelper</module>
+    <module>hardy.webservicehelper</module>
+    <module>hardy.reflex</module>
+    <module>hardy.util</module>
+    <module>hardy.office</module>
+    <module>hardy.cryptogram</module>
+    <module>hardy.netty</module>
+    <module>hardy.socket</module>
+    <module>hardy.swing</module>
+    <module>hardy.jsptag</module>
+    <module>hardy.springutil</module>
+    <module>hardy.freemakerhelper</module>
+    <module>hardy.texthelper</module>
+    <module>hardy.quartz1</module>
+    <module>hardy.timerhelper</module>
+    <module>hardy.montion</module>
+    <module>hardy.alegole</module>
+    <module>hardy.webhelper</module>
+  </modules>
+  <dependencies>
+     <dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+			<version>1.6.2</version>
+		</dependency>
+
+		<!-- spring -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<!-- spring context 对ehCache的引�?? 如果 spring 3.1.x 不用引用此包 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context-support</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-webmvc</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-orm</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-tx</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-test</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jms</artifactId>
+			<version>${spring.version}</version>
+		</dependency>
+
+		 
+		<!-- web 使用 -->
+		<dependency>
+			<groupId>jstl</groupId>
+			<artifactId>jstl</artifactId>
+			<version>1.2</version>
+		</dependency>
+		<dependency>
+		  <groupId>javax.servlet.jsp</groupId>
+		  <artifactId>jsp-api</artifactId>
+		  <version>2.2</version>
+		</dependency>
+		<dependency>
+		  <groupId>javax.servlet</groupId>
+		  <artifactId>javax.servlet-api</artifactId>
+		  <version>3.1.0</version>
+		</dependency>
+
+		<!-- log4j -->
+		<dependency>
+			<groupId>log4j</groupId>
+			<artifactId>log4j</artifactId>
+			<version>1.2.13</version>
+		</dependency>
+        <dependency>
+			<groupId>ognl</groupId>
+			<artifactId>ognl</artifactId>
+			<version>3.1.10</version>
+		</dependency>
+		<!-- junit -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.8</version>
+		</dependency>
+		
+		<!-- ecache -->
+		<dependency>
+			<groupId>net.sf.ehcache</groupId>
+			<artifactId>ehcache-core</artifactId>
+			<version>2.6.6</version>
+		</dependency>
+		<!-- json 相关工具 -->
+		<dependency>
+			<groupId>com.alibaba</groupId>
+			<artifactId>fastjson</artifactId>
+			<version>1.2.1</version>
+		</dependency>
+		<!-- word excel相关工具 -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>3.9</version>
+		</dependency>
+		<!-- commons -->
+		<dependency>
+		    <groupId>org.apache.commons</groupId>
+		    <artifactId>commons-lang3</artifactId>
+		    <version>3.5</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.directory.studio</groupId>
+		    <artifactId>org.apache.commons.lang</artifactId>
+		    <version>2.6</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.commons</groupId>
+		    <artifactId>commons-io</artifactId>
+		    <version>1.3.2</version>
+		</dependency>
+		<dependency>
+		    <groupId>io.netty</groupId>
+		    <artifactId>netty-all</artifactId>
+		    <!-- <version>4.1.6.Final</version> -->
+		    <version>5.0.0.Alpha2</version>
+	 </dependency>
+		<!-- 逐步删除 -->
+         <dependency>
+		   <groupId>www.song</groupId>
+		   <artifactId>com.tools</artifactId>
+		   <version>0.0.3-1.7_test</version>
+		 </dependency>
+		
+  </dependencies>
+  
+</project>

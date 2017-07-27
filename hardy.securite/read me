@@ -1,0 +1,106 @@
+<!-- 全局过滤器 -->
+	 <mvc:interceptors>  
+	  <!--bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor">  
+	  	<property name="paramName" value="lang"/>  
+	  </bean-->
+	   <mvc:interceptor> 
+        <mvc:mapping path="/**"/> 
+        <mvc:exclude-mapping path="/" /> 
+        <mvc:exclude-mapping path="/user/login" />
+        <mvc:exclude-mapping path="/static/**" />
+        <mvc:exclude-mapping path="/mobile/**" />
+         <bean class="hardy.securite.HardyAuthorization">
+             <property name="linkedType" value="and" />
+             <property name="hardyHandler">
+                  <list>
+                     <bean class="hardy.securite.handler.annotationHandler.AnnotationHandler">
+                         <!-- 过滤处理器顺序 -->
+                         <property name="order" value="0" />
+                         <!-- 过滤处理器唯一标识 -->
+                         <property name="name" value="test"/>
+                         <!-- 过滤处理器是否启用 -->
+                         <property name="open" value="true"/>
+                         <!-- 如果注解使用el,对el的处理接口 -->
+                         <property name="el" ref="AnnotationEL"/>
+                         <!-- 如果使用URLAnnotationEx接口可对最终处理Annotation做改变 -->
+                         <property name="ue" ref="URLAnnotationEx"/>
+                     </bean>
+                  </list>
+             </property>
+              <!-- 是否打印过滤内容 -->
+              <property name="debug" value="true"/>
+              <!-- 使用TraitRefuse接口对权限或异常后的数据做处理 -->
+              <property name="tr" ref="TraitRefuse"/>
+         </bean>
+      </mvc:interceptor>
+  </mvc:interceptors>
+  
+  <!-- 全局过滤器 -->
+	 <mvc:interceptors>  
+	  <!--bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor">  
+	  	<property name="paramName" value="lang"/>  
+	  </bean-->
+	   <mvc:interceptor> 
+        <mvc:mapping path="/**"/> 
+        <mvc:exclude-mapping path="/" /> 
+        <mvc:exclude-mapping path="/user/login" />
+        <mvc:exclude-mapping path="/static/**" />
+        <mvc:exclude-mapping path="/mobile/**" />
+         <bean class="hardy.special.simple.SimpleInterceptor" 
+         p:noSessionUrl="http://123.15.58.210"/> 
+      </mvc:interceptor>
+  </mvc:interceptors>
+  
+ 
+  
+  <!-- 全局过滤器 -->
+	 <mvc:interceptors>  
+	  <!--bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor">  
+	  	<property name="paramName" value="lang"/>  
+	  </bean-->
+	   <mvc:interceptor> 
+        <mvc:mapping path="/**"/> 
+        <mvc:exclude-mapping path="/" /> 
+        <mvc:exclude-mapping path="/user/login" />
+        <mvc:exclude-mapping path="/static/**" />
+        <mvc:exclude-mapping path="/mobile/**" />
+        <!-- 简单过滤设置  forward:request跳转,其他redirect跳转-->
+         <bean class="hardy.special.simple.SimpleInterceptor" 
+         p:noSessionUrl="http://123.15.58.210",
+         p:startUrl="/disp"/><!--forward:/ --> 
+      </mvc:interceptor>
+  </mvc:interceptors>
+  
+  
+  <!-- 全局过滤器 -->
+	 <mvc:interceptors>  
+	  <!--bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor">  
+	  	<property name="paramName" value="lang"/>  
+	  </bean-->
+	   <mvc:interceptor> 
+        <mvc:mapping path="/**"/> 
+        <mvc:exclude-mapping path="/" /> 
+        <mvc:exclude-mapping path="/user/login" />
+        <mvc:exclude-mapping path="/static/**" />
+        <mvc:exclude-mapping path="/mobile/**" />
+        <bean class="hardy.securite.HardyAuthorization">
+             <property name="linkedType" value="and" />
+             <property name="hardyHandler">
+                  <list>
+                     <bean class="hardy.securite.handler.annotationHandler.AnnotationHandler" />
+                     <bean class="hardy.securite.handler.webHandler.RequestHandler" >
+                         <property name="scope">
+                            <array>
+                              <value>request:name,ip</value>
+                            </array>
+                         </property>
+                     </bean>
+                  </list>
+             </property>
+              <!-- 是否打印过滤内容 -->
+              <property name="debug" value="true"/>
+              <!-- 使用TraitRefuse接口对权限或异常后的数据做处理 -->
+              <property name="tr">
+                 <bean class="hardy.securite.handler.trait.AbstractTrait" />
+              </property>
+         </bean>

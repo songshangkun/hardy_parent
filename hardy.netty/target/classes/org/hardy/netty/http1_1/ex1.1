@@ -1,0 +1,460 @@
+package com.song.util.netty.http1_1;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.Map.Entry;
+import java.util.UUID;
+
+import org.springframework.context.expression.MapAccessor;
+
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.multipart.Attribute;
+import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
+import io.netty.handler.codec.http.multipart.FileUpload;
+import io.netty.handler.codec.http.multipart.HttpDataFactory;
+import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
+import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
+import io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import io.netty.handler.codec.http.multipart.InterfaceHttpData.HttpDataType;
+import io.netty.util.CharsetUtil;
+import io.netty.util.ReferenceCountUtil;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.parser.ParserConfig;
+import com.alibaba.fastjson.util.TypeUtils;
+import com.song.tool.array.util.ArraysUtils;
+import com.song.tool.reflex.RefletClazzUtil;
+import com.song.util.netty.http.HttpConfig;
+import com.song.util.netty.http.HttpRequestInfo;
+import com.song.util.netty.http.RequestMethod;
+import com.song.util.netty.http.RequestParser;
+import com.song.util.netty.http.ServletContainer;
+import com.song.util.netty.http.ServletContainer.UrlMethodInfo;
+import com.song.util.netty.http.exception.NotSupportException;
+import com.song.util.netty.http.exception.RequestParamException;
+import com.song.util.netty.http.help.ResponseHelper;
+
+/**
+ * http主服务的handler处理程序
+ * @author 09
+ *
+ */
+public class HttpServer1_1handler extends SimpleChannelInboundHandler<HttpObject>{
+   
+	 private HttpConfig config;
+	 
+	 private HttpRequest request;
+	 
+	 private FullHttpResponse response ; 
+	 
+	 private UrlMethodInfo info;  
+	 
+	 private Object[] params ;
+	 
+	 public HttpServer1_1handler(HttpConfig config){
+		  this.config = config;
+	 }
+	 
+	 private static final HttpDataFactory factory =
+	            new DefaultHttpDataFactory(DefaultHttpDataFactory.MINSIZE); // Disk if size exceed
+	 
+	 private HttpPostRequestDecoder decoder;
+	 
+	 @Override
+	    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+	        if (decoder != null) {
+	            decoder.cleanFiles();
+	        }
+	    }
+
+	@Override
+	protected void messageReceived(ChannelHandlerContext ctx, HttpObject msg)
+			throws Exception {	
+		boolean hasCtx = false;
+		try{ //1-如果msg属于HttpRequest请求开始处理
+			if (msg instanceof HttpRequest) {
+				   this.request = (HttpRequest) msg;
+				   if(!request.decoderResult().isSuccess()){ 
+						  //客户端错误 400 错误请求
+						  sendError(ctx,HttpResponseStatus.BAD_REQUEST);
+						  return;
+					  }	  
+					   info = null;
+					  //1-首先解析排除参数的URL
+					  String url = RequestParser.getUri(request);
+					  //1.x 排除过滤掉的url
+					   if(!config.getExcusion().isEmpty()){ 
+						    for(String excuUrl:config.getExcusion()){
+						    	if(url.startsWith(excuUrl)){
+						    		 sendError(ctx,HttpResponseStatus.NOT_ACCEPTABLE);
+									  return;
+						    	}
+						    }
+						}
+					 //2-如果url不在设置范围内 返回错误信息
+					   if(!ServletContainer.getServletMap().containsKey(url)){
+						   sendError(ctx,HttpResponseStatus.NOT_FOUND);
+							  return;
+					   }
+					 //3-找到方法参数设置信息类UrlMethodInfo
+					   info = ServletContainer.getMethodByUrl(url);
+					 //4-验证WEB访问方法是否一致
+					   if(!RequestMethod.containsRequestMethod(info.getRequestMethods(), request)){
+							//405用来访问本页面的 HTTP 谓词不被允许（方法不被允许）
+							  sendError(ctx,HttpResponseStatus.METHOD_NOT_ALLOWED);
+							  return;
+						}
+					  //5-设置默认的response输出对象
+					   response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+					   response.headers().set(HttpHeaderNames.CONTENT_TYPE, info.getResultType().getContentTypeString(this.config.getCharSet().name())); 
+					}
+			      if(this.request!=null){
+					 //6-根据获取的UrlMethodInfo继续解析
+					 //6.0获取执行方法的参数名称,该名成和方法的类型数量对应
+					   String[] parameterNames = ServletContainer.getMethodParameterNamesByAsm4(info.getMethod());
+					   params = new Object[info.getClazzs().length];
+					 //6.1 如果是GET请求处理
+					if(request.method()==HttpMethod.GET){
+						QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
+						java.util.Set <Entry<String, List<String>>> set = decoder.parameters().entrySet();
+			            buildParamsGET(hasCtx, ctx, parameterNames, set);
+			            ResponseHelper.writeResponse(request, ctx.channel(), HttpResponseStatus.OK, Arrays.toString(params), true);
+			            return;
+					}
+					//POST请求处理
+					else if(request.method()==HttpMethod.POST){
+						decoder = new HttpPostRequestDecoder(factory,  this.request);
+						//如果是简单post请求
+						if(!HttpPostRequestDecoder.isMultipart(request)){
+							if (decoder != null) {  
+							/**
+							 * 注意Http每次访问可能多次访问messageReceived方法 msg有可能是不同对象
+							 * 如果是HttpRequest则this.request不为空，但是对于POST请求的参数却保存在
+							 * HttpContent对象中,所以这里要反复验证此次传过来的对象是不是HttpContent。
+							 * 不同于使用HttpObjectAggregator的解析器，他会吧HttpRequest和HttpContent
+							 * 合并在一起编程FullHttpRequest,这样就全有了
+							 */
+							  if(msg instanceof HttpContent){
+								  HttpContent chunk = (HttpContent) msg;
+				                    decoder.offer(chunk);				                  			                  
+				                    List<InterfaceHttpData> datas = decoder.getBodyHttpDatas();
+								    buildParamsPOST(hasCtx, ctx, parameterNames,datas);
+								    if (chunk instanceof LastHttpContent) { 
+								    	ResponseHelper.writeResponse(request, ctx.channel(), HttpResponseStatus.OK, Arrays.toString(params), true);
+							            return;
+					                }
+							  }	
+					        }  
+						}
+						//如果是上传请求
+						else if(HttpPostRequestDecoder.isMultipart(request)){
+							if(msg instanceof HttpContent){
+								 HttpContent chunk = (HttpContent) msg;
+								 
+				                 decoder.offer(chunk);
+				                
+				                 
+				             	while (decoder.hasNext()) {
+				                 	InterfaceHttpData data = decoder.next();
+				                 	if (data != null) {
+				                 		try{
+				             			if (data.getHttpDataType() == HttpDataType.Attribute) {
+				              	            Attribute attribute = (Attribute) data;
+				              	           System.out.println(attribute.getName()+"---"+attribute.getValue());
+				              	           }else if (data.getHttpDataType() == HttpDataType.FileUpload) {
+				         		                FileUpload fileUpload = (FileUpload) data;
+				         		                if (fileUpload.isCompleted()) {
+				         		                	fileUpload.renameTo(new File("D:\\666\\test11.jpg"));
+				         		                } 
+				         		            }
+				                 		}finally{
+				                 			data.release();
+				                 		}
+				                 		 		            
+				              	       }
+				                 	}
+				             	if (chunk instanceof LastHttpContent) {
+				                	ResponseHelper.sendError(ctx, HttpResponseStatus.OK);
+				        	        decoder.destroy();
+				        	        decoder = null;
+				                }
+							}
+					}else{ 
+						sendError(ctx,HttpResponseStatus.NOT_IMPLEMENTED);
+						throw new NotSupportException("this server "+this.getClass().getName()+" not support method "+request.method().name());			
+					} 
+					 
+		        } 
+			} 
+		}catch (Exception e) {
+			ResponseHelper.writeResponse(request, ctx.channel(), HttpResponseStatus.INTERNAL_SERVER_ERROR, "ERROR", true);
+			e.printStackTrace(); 
+		}finally {
+			ReferenceCountUtil.release(msg);
+			ReferenceCountUtil.release(decoder);
+		}
+	}
+	
+
+	
+
+   
+    
+    
+    private static void sendError(ChannelHandlerContext ctx,HttpResponseStatus responseState){
+		  FullHttpResponse response = new DefaultFullHttpResponse
+		  (HttpVersion.HTTP_1_1, responseState,Unpooled.copiedBuffer("Failure: "+responseState.toString()+System.lineSeparator(),CharsetUtil.UTF_8));
+		  response.headers().set(HttpHeaderNames.CONTENT_TYPE,HttpHeaderValues.TEXT_PLAIN);
+		  ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+	}
+    
+    public static void main(String[] args) {
+    	  
+	}
+    
+    public void buildParamsGET(boolean hasCtx,ChannelHandlerContext ctx,String[]parameterNames, 
+    		Set <Entry<String, List<String>>> set){
+    	int index = 0;
+    	for(int i=0;i<info.getClazzs().length;i++){
+    	    for(Entry<String, List<String>> ens:set){
+    	    	 
+    	    	  //定义特殊的参数类型
+    	    	  if(info.getClazzs()[i]==FileUpload.class){
+					  sendError(ctx, HttpResponseStatus.NOT_ACCEPTABLE);
+					  throw new RequestParamException("METHOD　GET NOT SUPPORT UPLOAD FILES :"+parameterNames[i]);
+				  }else if(info.getClazzs()[i]==FullHttpRequest.class){
+					  params[index] = request; index++;break;
+				  }else if(info.getClazzs()[i]==HttpRequest.class){
+					  params[index] = request; index++;break;
+				  }else if(info.getClazzs()[i]==FullHttpResponse.class){
+					   params[index] = response;index++; break;
+				   }else if(info.getClazzs()[i]==HttpResponse.class){
+					   params[index] = response;index++; break;
+				   }
+				   else if(info.getClazzs()[i]==ChannelHandlerContext.class){
+					  params[index] = ctx;
+					  hasCtx = true;
+					  index++;break;
+				  }else
+				   //定义一般类型
+				  if(parameterNames[i].equals(ens.getKey())){
+					  //如果是单独参数
+                      if(!info.getClazzs()[i].isArray()&&!RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+                    	   Object object = TypeUtils.cast(ens.getValue().get(0), info.getClazzs()[i], ParserConfig.getGlobalInstance());  
+    					   params[index] = object;
+    					   index++;break;
+                      }else
+                    	//定义集合参数类型  
+                    	if(info.getClazzs()[i].isArray()||RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+                    	   Object object = JSONObject.toJavaObject(JSON.parseArray(ens.getValue().toString()), info.getClazzs()[i]);  
+     					   params[index] = object;
+     					   index++;break;
+                      }  
+			}else {
+				params[index] = null;
+				if(i==info.getClazzs().length-1){
+					index++;	
+				}
+			}
+		}
+    	    
+    	} 
+    	System.out.println(Arrays.toString(params)+"  GET");
+    }
+    
+  
+    
+    public void buildParamsPOST(boolean hasCtx,ChannelHandlerContext ctx,String[]parameterNames, 
+    		List<InterfaceHttpData> datas) throws IOException{
+    	int index = 0;
+		  for (int i=0;i<info.getClazzs().length;i++) {
+           	 for(InterfaceHttpData data:datas){
+           		 if(data instanceof Attribute){
+		            	 Attribute att = (Attribute)data;
+       	    	  //定义特殊的参数类型
+       	    	  if(info.getClazzs()[i]==FileUpload.class){
+						  sendError(ctx, HttpResponseStatus.NOT_ACCEPTABLE);
+						  throw new RequestParamException("METHOD　GET NOT SUPPORT UPLOAD FILES :"+parameterNames[i]);
+					  }else if(info.getClazzs()[i]==FullHttpRequest.class){
+						  params[index] = request; index++;break;
+					  }else if(info.getClazzs()[i]==HttpRequest.class){
+						  params[index] = request; index++;break;
+					  }else if(info.getClazzs()[i]==FullHttpResponse.class){
+						   params[index] = response;index++; break;
+					   }else if(info.getClazzs()[i]==HttpResponse.class){
+						   params[index] = response;index++; break;
+					   }
+					   else if(info.getClazzs()[i]==ChannelHandlerContext.class){
+						  params[index] = ctx;
+						  hasCtx = true;
+						  index++;break;
+					  }else
+					   //定义一般类型
+					  if(parameterNames[i].equals(att.getName())){
+						  try{
+							//如果是单独参数
+		                      if(!info.getClazzs()[i].isArray()&&!RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+		                    	   Object object = TypeUtils.cast(att.getValue(), info.getClazzs()[i], ParserConfig.getGlobalInstance());  
+		    					   params[index] = object;
+		    					   index++;break;
+		                      }else
+		                    	//定义集合参数类型  
+		                    	if(info.getClazzs()[i].isArray()||RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+		                    	   Object object = JSONObject.toJavaObject(JSON.parseArray("["+att.getValue().toString()+"]"), info.getClazzs()[i]);  
+		     					   params[index] = object;
+		     					   index++;break;
+		                      }   
+						  }catch(Exception e){
+							 throw new RequestParamException("THE PARAMS FORMATION MAY BE ERROR,PLEASE CHECK YOUR PARAMS"); 
+						  }
+						  
+				}else {
+					params[index] = null;
+					if(i==info.getClazzs().length-1){
+						index++;	
+					}
+				}	    
+	           }    
+			}
+	                 
+	     }//while 结束 
+		 System.out.println(Arrays.toString(params)+"  POST"); 
+    }
+    
+    public void buildParamsMultipart(boolean hasCtx,ChannelHandlerContext ctx,String[]parameterNames, 
+    		List<InterfaceHttpData> datas) throws IOException{
+    	int index = 0;
+		  for (int i=0;i<info.getClazzs().length;i++) {
+           	 for(InterfaceHttpData data:datas){
+           		 if (data != null&&data  instanceof FileUpload) {  
+            		FileUpload fileUpload = (FileUpload)data;
+            		if(fileUpload.isCompleted()){
+            			System.out.println("file isCompleted");
+            			params[index] = fileUpload; index++;break;
+            		}
+           		}
+           		 if(data instanceof Attribute){
+		            	 Attribute att = (Attribute)data;
+       	    	  //定义特殊的参数类型
+       	    	      if(info.getClazzs()[i]==FileUpload.class){
+       	    	    	    break;
+					  }else if(info.getClazzs()[i]==FullHttpRequest.class){
+						  params[index] = request; index++;break;
+					  }else if(info.getClazzs()[i]==HttpRequest.class){
+						  params[index] = request; index++;break;
+					  }else if(info.getClazzs()[i]==FullHttpResponse.class){
+						   params[index] = response;index++; break;
+					   }else if(info.getClazzs()[i]==HttpResponse.class){
+						   params[index] = response;index++; break;
+					   }
+					   else if(info.getClazzs()[i]==ChannelHandlerContext.class){
+						  params[index] = ctx;
+						  hasCtx = true;
+						  index++;break;
+					  }else
+					   //定义一般类型
+					  if(parameterNames[i].equals(att.getName())){
+						  //如果是单独参数
+	                      if(!info.getClazzs()[i].isArray()&&!RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+	                    	   Object object = TypeUtils.cast(att.getValue(), info.getClazzs()[i], ParserConfig.getGlobalInstance());  
+	    					   params[index] = object;
+	    					   index++;break;
+	                      }else
+	                    	//定义集合参数类型  
+	                    	if(info.getClazzs()[i].isArray()||RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+	                    	   Object object = JSONObject.toJavaObject(JSON.parseArray("["+att.getValue().toString()+"]"), info.getClazzs()[i]);  
+	     					   params[index] = object;
+	     					   index++;break;
+	                      }  
+				}else {
+					params[index] = null;
+					if(i==info.getClazzs().length-1){
+						index++;	
+					}
+				}	    
+	           }    
+			}
+	                 
+	     }//while 结束 
+		 System.out.println(Arrays.toString(params)+"  POST"); 
+    }
+    
+    public void buildParamsMultipart(boolean hasCtx,ChannelHandlerContext ctx,String[]parameterNames) throws IOException{
+        Map<String,Object> dataAttr = new HashMap<String, Object>();
+    	while (decoder.hasNext()) {
+        	InterfaceHttpData data = decoder.next();
+        	if (data != null) {
+        		try{
+    			if (data.getHttpDataType() == HttpDataType.Attribute) {
+     	            Attribute attribute = (Attribute) data;
+     	            dataAttr.put(attribute.getName(), attribute.getValue());
+     	           }else if (data.getHttpDataType() == HttpDataType.FileUpload) {
+		                FileUpload fileUpload = (FileUpload) data;
+		                if (fileUpload.isCompleted()) {
+		                	dataAttr.put(fileUpload.getName(), fileUpload);  
+		                } 
+		            }
+        		}finally{
+        			data.release();
+        		}
+        		 		            
+     	       }
+        	}
+		  for (int i=0;i<info.getClazzs().length;i++) {
+           	 String parName = parameterNames[i];
+           	 if(dataAttr.containsKey(parName)){
+           		if(!info.getClazzs()[i].isArray()&&!RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+           		  if(info.getClazzs()[i]!=FileUpload.class){
+           			 params[i] = TypeUtils.cast(dataAttr.get(parName), info.getClazzs()[i], ParserConfig.getGlobalInstance());   
+           		  }else{
+           			 params[i] = dataAttr.get(parName);
+           		  }
+           		}else if(info.getClazzs()[i].isArray()||RefletClazzUtil.isExistInterface(info.getClazzs()[i], "java.util.Collection")){
+           			params[i] = JSONObject.toJavaObject(JSON.parseArray("["+dataAttr.get(parName).toString()+"]"), info.getClazzs()[i]);  	  
+           		}
+           	 }else{
+           		if(info.getClazzs()[i]==FullHttpRequest.class){
+           			params[i] = request;
+           		}else if(info.getClazzs()[i]==HttpRequest.class){
+           			params[i] = request;
+           		}else if(info.getClazzs()[i]==FullHttpResponse.class){
+					   params[i] = response;
+			    }else if(info.getClazzs()[i]==HttpResponse.class){
+				   params[i] = response;
+			    }else if(info.getClazzs()[i]==ChannelHandlerContext.class){
+			    	params[i] = ctx;
+			    	hasCtx = true;
+			    }
+           		 
+           	 }
+	                 
+	     } 
+		 System.out.println(Arrays.toString(params)+"  POST"); 
+    }
+}
